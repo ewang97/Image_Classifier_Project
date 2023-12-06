@@ -20,7 +20,7 @@ def main():
     parser.add_argument("--save_dir", dest="save_dir", 
                         action="store", default="./checkpoint.pth")
     parser.add_argument("--arch", dest="arch",
-                         action="store", default="vgg16", type = str)
+                         action="store", default="vgg", type = str)
     parser.add_argument("--learning_rate", 
                         dest="learning_rate", action="store", default=0.003, type = float)
     parser.add_argument("--hidden_units", type=int, dest="hidden_units", 
@@ -62,17 +62,44 @@ def main():
     testloader = torch.utils.data.DataLoader(test_data,batch_size = 64, shuffle=True)
     
     #preload features architecture
-    model = getattr(torchvision.models, args.arch)(pretrained=True)
-    for param in model.parameters():
-        param.requires_grad = False
+    if args.arch.lower() == 'densenet':
+        model = models.densenet121(pretrained=True)
+        classifier_in_features = 1024
+        for param in model.parameters():
+            param.requires_grad = False
 
-    classifier = nn.Sequential(OrderedDict([
-                            ("fc1",nn.Linear(25088,args.hidden_units)),
-                            ("relu", nn.ReLU()),
-                            ("dropout",nn.Dropout(0.2)),
-                            ("fc2", nn.Linear(args.hidden_units,102)),
-                            ("output", nn.LogSoftmax(dim=1))
-                            ]))
+        classifier = nn.Sequential(OrderedDict([
+                                ("fc1",nn.Linear(1024,args.hidden_units)),
+                                ("relu", nn.ReLU()),
+                                ("dropout",nn.Dropout(0.2)),
+                                ("fc2", nn.Linear(args.hidden_units,102)),
+                                ("output", nn.LogSoftmax(dim=1))
+                                ]))
+    elif args.arch.lower() == 'alexnet':
+        model = models.alexnet(pretrained=True)
+        classifier_in_features = 9214
+        for param in model.parameters():
+            param.requires_grad = False
+
+        classifier = nn.Sequential(OrderedDict([
+                                ("fc1",nn.Linear(9214,args.hidden_units)),
+                                ("relu", nn.ReLU()),
+                                ("dropout",nn.Dropout(0.2)),
+                                ("fc2", nn.Linear(args.hidden_units,102)),
+                                ("output", nn.LogSoftmax(dim=1))
+                                ]))
+    else:
+        model = models.vgg16(pretrained=True)
+        for param in model.parameters():
+            param.requires_grad = False
+        classifier_in_features = 25088
+        classifier = nn.Sequential(OrderedDict([
+                                ("fc1",nn.Linear(25088,args.hidden_units)),
+                                ("relu", nn.ReLU()),
+                                ("dropout",nn.Dropout(0.2)),
+                                ("fc2", nn.Linear(args.hidden_units,102)),
+                                ("output", nn.LogSoftmax(dim=1))
+                                ]))
     model.classifier = classifier
     
     if args.gpu == "gpu" and torch.cuda.is_available():
@@ -144,7 +171,8 @@ def main():
 
     print(f"Test Accuracy: {test_accuracy/len(testloader)*100:.2f}%")
 
-    checkpoint = {"input_size":25088,
+
+    checkpoint = {"input_size":classifier_in_features,
               "output_size":102,
               "learning_rate":args.learning_rate,
               "hidden_units":args.hidden_units,
